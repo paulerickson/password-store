@@ -262,7 +262,7 @@ cmd_version() {
 	============================================
 	= pass: the standard unix password manager =
 	=                                          =
-	=                  v1.7.4                  =
+	=                  v1.8.0                  =
 	=                                          =
 	=             Jason A. Donenfeld           =
 	=               Jason@zx2c4.com            =
@@ -284,7 +284,7 @@ cmd_usage() {
 	        List passwords.
 	    $PROGRAM find pass-names...
 	    	List passwords that match pass-names.
-	    $PROGRAM [show] [--clip[=line-number],-c[line-number]] pass-name
+	    $PROGRAM [show] [--clip[=line-number],-c[line-number]] [--pepper,-p] pass-name
 	        Show existing password and optionally put it on the clipboard.
 	        If put on the clipboard, it will be cleared in $CLIP_TIME seconds.
 	    $PROGRAM grep [GREPOPTIONS] search-string
@@ -366,29 +366,43 @@ cmd_init() {
 }
 
 cmd_show() {
-	local opts selected_line clip=0 qrcode=0
-	opts="$($GETOPT -o q::c:: -l qrcode::,clip:: -n "$PROGRAM" -- "$@")"
+	local opts selected_line clip=0 qrcode=0 pepper=0
+	opts="$($GETOPT -o q::c::p:: -l qrcode::,clip::,pepper:: -n "$PROGRAM" -- "$@")"
 	local err=$?
 	eval set -- "$opts"
 	while true; do case $1 in
 		-q|--qrcode) qrcode=1; selected_line="${2:-1}"; shift 2 ;;
 		-c|--clip) clip=1; selected_line="${2:-1}"; shift 2 ;;
+		-p|--pepper) pepper=1; selected_line="${2:-1}"; shift 2 ;;
 		--) shift; break ;;
 	esac done
 
-	[[ $err -ne 0 || ( $qrcode -eq 1 && $clip -eq 1 ) ]] && die "Usage: $PROGRAM $COMMAND [--clip[=line-number],-c[line-number]] [--qrcode[=line-number],-q[line-number]] [pass-name]"
+	[[ $err -ne 0 || ( $qrcode -eq 1 && $clip -eq 1 ) ]] && die "Usage: $PROGRAM $COMMAND [--clip[=line-number],-c[line-number]] [--qrcode[=line-number],-q[line-number]] [--pepper,-p] [pass-name]"
 
 	local pass
 	local path="$1"
 	local passfile="$PREFIX/$path.gpg"
+	local suffix
 	check_sneaky_paths "$path"
 	if [[ -f $passfile ]]; then
+		if [[ $pepper -eq 1 ]]; then
+			suffix=$(
+				pinentry <<-EOF | grep -Po '^D \K.*$'
+					settitle Password Store Pepper
+					setprompt Password Store Pepper
+					setdesc Enter string to append to the stored password
+					option allow-external-password-cache
+					setkeyinfo password-store-pepper-$path
+					getpin
+				EOF
+			)
+		fi
 		if [[ $clip -eq 0 && $qrcode -eq 0 ]]; then
-			pass="$($GPG -d "${GPG_OPTS[@]}" "$passfile" | $BASE64)" || exit $?
+			pass="$($GPG -d "${GPG_OPTS[@]}" "$passfile" | sed "1{s/$/$suffix/}" | $BASE64)" || exit $?
 			echo "$pass" | $BASE64 -d
 		else
 			[[ $selected_line =~ ^[0-9]+$ ]] || die "Clip location '$selected_line' is not a number."
-			pass="$($GPG -d "${GPG_OPTS[@]}" "$passfile" | tail -n +${selected_line} | head -n 1)" || exit $?
+			pass="$($GPG -d "${GPG_OPTS[@]}" "$passfile" | tail -n +${selected_line} | head -n 1)$suffix" || exit $?
 			[[ -n $pass ]] || die "There is no password to put on the clipboard at line ${selected_line}."
 			if [[ $clip -eq 1 ]]; then
 				clip "$pass" "$path"

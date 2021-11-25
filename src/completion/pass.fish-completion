@@ -97,6 +97,7 @@ complete -c $PROG -f -n '__fish_pass_uses_command edit' -a "(__fish_pass_print_e
 
 complete -c $PROG -f -n '__fish_pass_needs_command' -a show -d 'Command: show existing password'
 complete -c $PROG -f -n '__fish_pass_uses_command show' -s c -l clip -d 'Put password in clipboard'
+complete -c $PROG -f -n '__fish_pass_uses_command show' -s p -l pepper -d 'Add a string to the end of the password'
 complete -c $PROG -f -n '__fish_pass_uses_command show' -a "(__fish_pass_print_entries)"
 # When no command is given, `show` is defaulted.
 complete -c $PROG -f -n '__fish_pass_needs_command' -s c -l clip -d 'Put password in clipboard'
